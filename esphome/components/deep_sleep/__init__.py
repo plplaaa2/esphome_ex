@@ -34,26 +34,10 @@ from esphome.const import (
     PlatformFramework,
 )
 
+# --------- 기존 ESP32 전용 정의 유지 ---------
 WAKEUP_PINS = {
     VARIANT_ESP32: [
-        0,
-        2,
-        4,
-        12,
-        13,
-        14,
-        15,
-        25,
-        26,
-        27,
-        32,
-        33,
-        34,
-        35,
-        36,
-        37,
-        38,
-        39,
+        0, 2, 4, 12, 13, 14, 15, 25, 26, 27, 32, 33, 34, 35, 36, 37, 38, 39,
     ],
     VARIANT_ESP32C2: [0, 1, 2, 3, 4, 5],
     VARIANT_ESP32C3: [0, 1, 2, 3, 4, 5],
@@ -63,52 +47,10 @@ WAKEUP_PINS = {
     VARIANT_ESP32H2: [7, 8, 9, 10, 11, 12, 13, 14],
     VARIANT_ESP32P4: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
     VARIANT_ESP32S2: [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        20,
-        21,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
     ],
     VARIANT_ESP32S3: [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        20,
-        21,
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
     ],
 }
 
@@ -143,18 +85,16 @@ def _validate_ex1_wakeup_mode(value):
 
 deep_sleep_ns = cg.esphome_ns.namespace("deep_sleep")
 DeepSleepComponent = deep_sleep_ns.class_("DeepSleepComponent", cg.Component)
+
 EnterDeepSleepAction = deep_sleep_ns.class_("EnterDeepSleepAction", automation.Action)
 PreventDeepSleepAction = deep_sleep_ns.class_(
-    "PreventDeepSleepAction",
-    automation.Action,
-    cg.Parented.template(DeepSleepComponent),
+    "PreventDeepSleepAction", automation.Action, cg.Parented.template(DeepSleepComponent)
 )
 AllowDeepSleepAction = deep_sleep_ns.class_(
-    "AllowDeepSleepAction",
-    automation.Action,
-    cg.Parented.template(DeepSleepComponent),
+    "AllowDeepSleepAction", automation.Action, cg.Parented.template(DeepSleepComponent)
 )
 
+# --------- ESP32 전용 기존 enum 유지 ---------
 WakeupPinMode = deep_sleep_ns.enum("WakeupPinMode")
 WAKEUP_PIN_MODES = {
     "IGNORE": WakeupPinMode.WAKEUP_PIN_MODE_IGNORE,
@@ -169,6 +109,7 @@ EXT1_WAKEUP_MODES = {
     "ALL_LOW": esp_sleep_ext1_wakeup_mode_t.ESP_EXT1_WAKEUP_ALL_LOW,
     "ANY_HIGH": esp_sleep_ext1_wakeup_mode_t.ESP_EXT1_WAKEUP_ANY_HIGH,
 }
+
 WakeupCauseToRunDuration = deep_sleep_ns.struct("WakeupCauseToRunDuration")
 
 CONF_WAKEUP_PIN_MODE = "wakeup_pin_mode"
@@ -178,6 +119,16 @@ CONF_GPIO_WAKEUP_REASON = "gpio_wakeup_reason"
 CONF_TOUCH_WAKEUP_REASON = "touch_wakeup_reason"
 CONF_UNTIL = "until"
 
+# --------- Libretiny 전용: wakeup_pins 배열 지원 추가 ---------
+CONF_WAKEUP_PINS = "wakeup_pins"
+CONF_WAKE_LEVEL = "wake_level"
+
+LibretinyWakeLevel = deep_sleep_ns.enum("LibretinyWakeLevel")
+LIBRETINY_WAKE_LEVELS = {
+    "LOW": LibretinyWakeLevel.LIBRETINY_WAKE_ON_LOW,
+    "HIGH": LibretinyWakeLevel.LIBRETINY_WAKE_ON_HIGH,
+}
+
 WAKEUP_CAUSES_SCHEMA = cv.Schema(
     {
         cv.Required(CONF_DEFAULT): cv.positive_time_period_milliseconds,
@@ -186,19 +137,20 @@ WAKEUP_CAUSES_SCHEMA = cv.Schema(
     }
 )
 
+# --------- 기존 CONFIG_SCHEMA 유지 + Libretiny 확장만 추가 ---------
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(DeepSleepComponent),
+
+            # 기존: ESP32 전용 run/sleep/wakeup_pin/wakeup_pin_mode
             cv.Optional(CONF_RUN_DURATION): cv.Any(
                 cv.All(cv.only_on_esp32, WAKEUP_CAUSES_SCHEMA),
                 cv.positive_time_period_milliseconds,
             ),
             cv.Optional(CONF_SLEEP_DURATION): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_WAKEUP_PIN): cv.All(
-                cv.only_on_esp32,
-                pins.internal_gpio_input_pin_schema,
-                validate_pin_number,
+                cv.only_on_esp32, pins.internal_gpio_input_pin_schema, validate_pin_number
             ),
             cv.Optional(CONF_WAKEUP_PIN_MODE): cv.All(
                 cv.only_on_esp32, cv.enum(WAKEUP_PIN_MODES), upper=True
@@ -215,8 +167,7 @@ CONFIG_SCHEMA = cv.All(
                             pins.internal_gpio_input_pin_schema, validate_pin_number
                         ),
                         cv.Required(CONF_MODE): cv.All(
-                            cv.enum(EXT1_WAKEUP_MODES, upper=True),
-                            _validate_ex1_wakeup_mode,
+                            cv.enum(EXT1_WAKEUP_MODES, upper=True), _validate_ex1_wakeup_mode
                         ),
                     }
                 ),
@@ -236,11 +187,24 @@ CONFIG_SCHEMA = cv.All(
                 ),
                 cv.boolean,
             ),
+
+            # 추가: Libretiny 전용 다중 웨이크업 핀 배열 (ESP32 제한 없이 정의만 추가)
+            cv.Optional(CONF_WAKEUP_PINS): cv.ensure_list(
+                cv.Schema(
+                    {
+                        cv.Required("pin"): pins.internal_gpio_input_pin_schema,
+                        cv.Optional(CONF_WAKE_LEVEL, default="HIGH"): cv.one_of("HIGH", "LOW", lower=True),
+                        cv.Optional(CONF_WAKEUP_PIN_MODE, default="IGNORE"): cv.one_of(
+                            "IGNORE", "KEEP_AWAKE", "INVERT_WAKEUP", lower=True
+                        ),
+                    }
+                )
+            ),
         }
     ).extend(cv.COMPONENT_SCHEMA),
+    # 원본과 동일: 플랫폼 제한(ESP32/ESP8266). Libretiny는 외부 포크에서 사용하므로 여기 제한은 유지.
     cv.only_on([PLATFORM_ESP32, PLATFORM_ESP8266]),
 )
-
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
@@ -248,11 +212,16 @@ async def to_code(config):
 
     if CONF_SLEEP_DURATION in config:
         cg.add(var.set_sleep_duration(config[CONF_SLEEP_DURATION]))
+
+    # 기존 ESP32 단일 핀
     if CONF_WAKEUP_PIN in config:
         pin = await cg.gpio_pin_expression(config[CONF_WAKEUP_PIN])
         cg.add(var.set_wakeup_pin(pin))
+
     if CONF_WAKEUP_PIN_MODE in config:
         cg.add(var.set_wakeup_pin_mode(config[CONF_WAKEUP_PIN_MODE]))
+
+    # run_duration (기존 구조 유지)
     if CONF_RUN_DURATION in config:
         run_duration_config = config[CONF_RUN_DURATION]
         if not isinstance(run_duration_config, dict):
@@ -262,42 +231,36 @@ async def to_code(config):
             wakeup_cause_to_run_duration = cg.StructInitializer(
                 WakeupCauseToRunDuration,
                 ("default_cause", default_run_duration),
-                (
-                    "touch_cause",
-                    run_duration_config.get(
-                        CONF_TOUCH_WAKEUP_REASON, default_run_duration
-                    ),
-                ),
-                (
-                    "gpio_cause",
-                    run_duration_config.get(
-                        CONF_GPIO_WAKEUP_REASON, default_run_duration
-                    ),
-                ),
+                ("touch_cause", run_duration_config.get(CONF_TOUCH_WAKEUP_REASON, default_run_duration)),
+                ("gpio_cause", run_duration_config.get(CONF_GPIO_WAKEUP_REASON, default_run_duration)),
             )
             cg.add(var.set_run_duration(wakeup_cause_to_run_duration))
 
+    # ESP32 ext1/터치 (원본 유지)
     if CONF_ESP32_EXT1_WAKEUP in config:
         conf = config[CONF_ESP32_EXT1_WAKEUP]
         mask = 0
         for pin in conf[CONF_PINS]:
             mask |= 1 << pin[CONF_NUMBER]
-        struct = cg.StructInitializer(
-            Ext1Wakeup, ("mask", mask), ("wakeup_mode", conf[CONF_MODE])
-        )
+        struct = cg.StructInitializer(Ext1Wakeup, ("mask", mask), ("wakeup_mode", conf[CONF_MODE]))
         cg.add(var.set_ext1_wakeup(struct))
 
     if CONF_TOUCH_WAKEUP in config:
         cg.add(var.set_touch_wakeup(config[CONF_TOUCH_WAKEUP]))
 
+    # --------- Libretiny: 다중 wakeup_pins 배열을 C++로 전달 ---------
+    if CONF_WAKEUP_PINS in config:
+        for wp in config[CONF_WAKEUP_PINS]:
+            pin_expr = await cg.gpio_pin_expression(wp["pin"])
+            level_enum = LIBRETINY_WAKE_LEVELS[wp[CONF_WAKE_LEVEL].upper()]
+            mode_enum = WAKEUP_PIN_MODES[wp[CONF_WAKEUP_PIN_MODE].upper()]
+            # C++ DeepSleepComponent::add_wakeup_pin(InternalGPIOPin*, LibretinyWakeLevel, WakeupPinMode)
+            cg.add(var.add_wakeup_pin(pin_expr, level_enum, mode_enum))
+
     cg.add_define("USE_DEEP_SLEEP")
 
-
-DEEP_SLEEP_ACTION_SCHEMA = cv.Schema(
-    {
-        cv.GenerateID(): cv.use_id(DeepSleepComponent),
-    }
-)
+# --------- 액션/오토메이션 (원본 유지) ---------
+DEEP_SLEEP_ACTION_SCHEMA = cv.Schema({cv.GenerateID(): cv.use_id(DeepSleepComponent)})
 
 DEEP_SLEEP_ENTER_SCHEMA = cv.All(
     automation.maybe_simple_id(
@@ -308,9 +271,7 @@ DEEP_SLEEP_ENTER_SCHEMA = cv.All(
                         cv.positive_time_period_milliseconds
                     ),
                     # Only on ESP32 due to how long the RTC on ESP8266 can stay asleep
-                    cv.Exclusive(CONF_UNTIL, "time"): cv.All(
-                        cv.only_on_esp32, cv.time_of_day
-                    ),
+                    cv.Exclusive(CONF_UNTIL, "time"): cv.All(cv.only_on_esp32, cv.time_of_day),
                     cv.Optional(CONF_TIME_ID): cv.use_id(time.RealTimeClock),
                 }
             )
@@ -319,49 +280,31 @@ DEEP_SLEEP_ENTER_SCHEMA = cv.All(
     cv.has_none_or_all_keys(CONF_UNTIL, CONF_TIME_ID),
 )
 
-
-@automation.register_action(
-    "deep_sleep.enter", EnterDeepSleepAction, DEEP_SLEEP_ENTER_SCHEMA
-)
+@automation.register_action("deep_sleep.enter", EnterDeepSleepAction, DEEP_SLEEP_ENTER_SCHEMA)
 async def deep_sleep_enter_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
     var = cg.new_Pvariable(action_id, template_arg, paren)
     if CONF_SLEEP_DURATION in config:
         template_ = await cg.templatable(config[CONF_SLEEP_DURATION], args, cg.int32)
         cg.add(var.set_sleep_duration(template_))
-
     if CONF_UNTIL in config:
         until = config[CONF_UNTIL]
         cg.add(var.set_until(until[CONF_HOUR], until[CONF_MINUTE], until[CONF_SECOND]))
-
         time_ = await cg.get_variable(config[CONF_TIME_ID])
         cg.add(var.set_time(time_))
-
     return var
 
-
-@automation.register_action(
-    "deep_sleep.prevent",
-    PreventDeepSleepAction,
-    automation.maybe_simple_id(DEEP_SLEEP_ACTION_SCHEMA),
-)
-@automation.register_action(
-    "deep_sleep.allow",
-    AllowDeepSleepAction,
-    automation.maybe_simple_id(DEEP_SLEEP_ACTION_SCHEMA),
-)
+@automation.register_action("deep_sleep.prevent", PreventDeepSleepAction, automation.maybe_simple_id(DEEP_SLEEP_ACTION_SCHEMA))
+@automation.register_action("deep_sleep.allow", AllowDeepSleepAction, automation.maybe_simple_id(DEEP_SLEEP_ACTION_SCHEMA))
 async def deep_sleep_action_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
     await cg.register_parented(var, config[CONF_ID])
     return var
 
-
+# --------- 소스 필터링 (원본 유지) ---------
 FILTER_SOURCE_FILES = filter_source_files_from_platform(
     {
-        "deep_sleep_esp32.cpp": {
-            PlatformFramework.ESP32_ARDUINO,
-            PlatformFramework.ESP32_IDF,
-        },
+        "deep_sleep_esp32.cpp": {PlatformFramework.ESP32_ARDUINO, PlatformFramework.ESP32_IDF},
         "deep_sleep_esp8266.cpp": {PlatformFramework.ESP8266_ARDUINO},
     }
 )
