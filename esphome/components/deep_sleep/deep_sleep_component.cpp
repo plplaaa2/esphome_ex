@@ -12,7 +12,7 @@ bool global_has_deep_sleep = false;
 
 void DeepSleepComponent::setup() {
   global_has_deep_sleep = true;
-  const optional<uint32_t> run_duration = get_run_duration_();
+  const auto run_duration = get_run_duration_();
   if (run_duration.has_value()) {
     ESP_LOGI(TAG, "Scheduling in %" PRIu32 " ms", *run_duration);
     this->set_timeout(*run_duration, [this]() { this->begin_sleep(); });
@@ -29,10 +29,11 @@ void DeepSleepComponent::dump_config() {
   }
 
 #ifdef USE_LIBRETINY
-  if (this->libretiny_wakeup_pin_ != nullptr) {
-    ESP_LOGCONFIG(TAG, "  Wakeup Pin (Libretiny): %u", this->libretiny_wakeup_pin_->get_pin());
-    ESP_LOGCONFIG(TAG, "  Wake Level: %s",
-                  this->libretiny_wake_level_ == LIBRETINY_WAKE_ON_HIGH ? "HIGH" : "LOW");
+  for (auto &wp : this->libretiny_wakeup_pins_) {
+    ESP_LOGCONFIG(TAG, "  Wakeup Pin: %u, Level: %s, Mode: %d",
+                  wp.pin->get_pin(),
+                  wp.level == LIBRETINY_WAKE_ON_HIGH ? "HIGH" : "LOW",
+                  wp.mode);
   }
 #endif
 
@@ -72,11 +73,17 @@ void DeepSleepComponent::begin_sleep(bool manual) {
 void DeepSleepComponent::prevent_deep_sleep() { this->prevent_ = true; }
 void DeepSleepComponent::allow_deep_sleep() { this->prevent_ = false; }
 
+#ifdef USE_LIBRETINY
+void DeepSleepComponent::add_wakeup_pin(InternalGPIOPin *pin, LibretinyWakeLevel level, WakeupPinMode mode) {
+  this->libretiny_wakeup_pins_.push_back({pin, level, mode});
+}
+#endif
+
 bool DeepSleepComponent::prepare_to_sleep_() {
 #ifdef USE_LIBRETINY
-  if (this->libretiny_wakeup_pin_ != nullptr) {
-    uint8_t pin = this->libretiny_wakeup_pin_->get_pin();
-    bool wake_high = (this->libretiny_wake_level_ == LIBRETINY_WAKE_ON_HIGH);
+  for (auto &wp : this->libretiny_wakeup_pins_) {
+    uint8_t pin = wp.pin->get_pin();
+    bool wake_high = (wp.level == LIBRETINY_WAKE_ON_HIGH);
     ESP_LOGD(TAG, "Configuring Libretiny wakeup pin: %u, level: %s", pin, wake_high ? "HIGH" : "LOW");
 
     // TODO: Libretiny SDK 함수로 교체 필요
