@@ -24,13 +24,8 @@ enum WakeupPinMode {
 #endif
 
 #ifdef USE_LIBRETINY
-enum LibretinyWakeLevel {
-  LIBRETINY_WAKE_ON_LOW = 0,
-  LIBRETINY_WAKE_ON_HIGH = 1,
-};
 struct LibretinyWakePin {
   InternalGPIOPin *pin;
-  LibretinyWakeLevel level;
   WakeupPinMode mode;
 };
 #endif
@@ -46,7 +41,7 @@ class DeepSleepComponent : public Component {
 #endif
 
 #ifdef USE_LIBRETINY
-  void add_wakeup_pin(InternalGPIOPin *pin, LibretinyWakeLevel level, WakeupPinMode mode);
+  void add_wakeup_pin(InternalGPIOPin *pin, WakeupPinMode mode);
 #endif
 
   void setup() override;
