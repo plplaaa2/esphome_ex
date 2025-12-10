@@ -45,11 +45,13 @@ void DeepSleepComponent::setup() {
     ESP_LOGD(TAG, "Not scheduling Deep Sleep, as no run duration is configured.");
   }
 }
+
 void DeepSleepComponent::dump_config() {
-  ESP_LOGCONFIG(TAG, "Setting up Deep Sleep...");
+  ESP_LOGCONFIG(TAG, "Deep Sleep:");
   if (this->sleep_duration_.has_value()) {
-    uint32_t duration = *this->sleep_duration_ / 1000;
-    ESP_LOGCONFIG(TAG, "  Sleep Duration: %u ms", duration);
+    // sleep_duration_ is microseconds; print as ms for readability
+    uint32_t duration_ms = static_cast<uint32_t>(*this->sleep_duration_ / 1000ULL);
+    ESP_LOGCONFIG(TAG, "  Sleep Duration: %u ms", duration_ms);
   }
   if (this->run_duration_.has_value()) {
     ESP_LOGCONFIG(TAG, "  Run Duration: %u ms", *this->run_duration_);
@@ -57,22 +59,33 @@ void DeepSleepComponent::dump_config() {
 #ifdef USE_ESP32
   if (wakeup_pin_ != nullptr) {
     LOG_PIN("  Wakeup Pin: ", this->wakeup_pin_);
+    ESP_LOGCONFIG(TAG, "  Wakeup Pin Mode: %u", static_cast<unsigned>(this->wakeup_pin_mode_));
   }
   if (this->wakeup_cause_to_run_duration_.has_value()) {
-    ESP_LOGCONFIG(TAG, "  Default Wakeup Run Duration: %u ms", this->wakeup_cause_to_run_duration_->default_cause);
-    ESP_LOGCONFIG(TAG, "  Touch Wakeup Run Duration: %u ms", this->wakeup_cause_to_run_duration_->touch_cause);
-    ESP_LOGCONFIG(TAG, "  GPIO Wakeup Run Duration: %u ms", this->wakeup_cause_to_run_duration_->gpio_cause);
+    ESP_LOGCONFIG(TAG, "  Default Wakeup Run Duration: %u ms",
+                  this->wakeup_cause_to_run_duration_->default_cause);
+    ESP_LOGCONFIG(TAG, "  Touch Wakeup Run Duration: %u ms",
+                  this->wakeup_cause_to_run_duration_->touch_cause);
+    ESP_LOGCONFIG(TAG, "  GPIO Wakeup Run Duration: %u ms",
+                  this->wakeup_cause_to_run_duration_->gpio_cause);
   }
 #endif
 }
+
 void DeepSleepComponent::loop() {
   if (this->next_enter_deep_sleep_)
     this->begin_sleep();
 }
+
 float DeepSleepComponent::get_loop_priority() const {
   return -100.0f;  // run after everything else is ready
 }
-void DeepSleepComponent::set_sleep_duration(uint32_t time_ms) { this->sleep_duration_ = uint64_t(time_ms) * 1000; }
+
+void DeepSleepComponent::set_sleep_duration(uint32_t time_ms) {
+  // Store as microseconds for platform APIs
+  this->sleep_duration_ = static_cast<uint64_t>(time_ms) * 1000ULL;
+}
+
 #if defined(USE_ESP32)
 void DeepSleepComponent::set_wakeup_pin_mode(WakeupPinMode wakeup_pin_mode) {
   this->wakeup_pin_mode_ = wakeup_pin_mode;
@@ -81,32 +94,30 @@ void DeepSleepComponent::set_wakeup_pin_mode(WakeupPinMode wakeup_pin_mode) {
 
 #if defined(USE_ESP32)
 #if !defined(USE_ESP32_VARIANT_ESP32C3)
-
 void DeepSleepComponent::set_ext1_wakeup(Ext1Wakeup ext1_wakeup) { this->ext1_wakeup_ = ext1_wakeup; }
-
 void DeepSleepComponent::set_touch_wakeup(bool touch_wakeup) { this->touch_wakeup_ = touch_wakeup; }
-
 #endif
 
 void DeepSleepComponent::set_run_duration(WakeupCauseToRunDuration wakeup_cause_to_run_duration) {
-  wakeup_cause_to_run_duration_ = wakeup_cause_to_run_duration;
+  this->wakeup_cause_to_run_duration_ = wakeup_cause_to_run_duration;
 }
-
 #endif
 
 void DeepSleepComponent::set_run_duration(uint32_t time_ms) { this->run_duration_ = time_ms; }
+
 void DeepSleepComponent::begin_sleep(bool manual) {
   if (this->prevent_ && !manual) {
     this->next_enter_deep_sleep_ = true;
     return;
   }
+
 #ifdef USE_ESP32
+  // If KEEP_AWAKE and no timer is set, and wakeup pin is already active, defer sleep
   if (this->wakeup_pin_mode_ == WAKEUP_PIN_MODE_KEEP_AWAKE && this->wakeup_pin_ != nullptr &&
       !this->sleep_duration_.has_value() && this->wakeup_pin_->digital_read()) {
-    // Defer deep sleep until inactive
     if (!this->next_enter_deep_sleep_) {
       this->status_set_warning();
-      ESP_LOGW(TAG, "Waiting for pin_ to switch state to enter deep sleep...");
+      ESP_LOGW(TAG, "Wakeup pin currently active; deferring deep sleep until inactive...");
     }
     this->next_enter_deep_sleep_ = true;
     return;
@@ -115,33 +126,37 @@ void DeepSleepComponent::begin_sleep(bool manual) {
 
   ESP_LOGI(TAG, "Beginning Deep Sleep");
   if (this->sleep_duration_.has_value()) {
-    ESP_LOGI(TAG, "Sleeping for %" PRId64 "us", *this->sleep_duration_);
+    ESP_LOGI(TAG, "Sleeping for %" PRId64 " us", *this->sleep_duration_);
   }
   App.run_safe_shutdown_hooks();
 
 #if defined(USE_ESP32)
-#if !defined(USE_ESP32_VARIANT_ESP32C3)
+  // Timer wakeup (available on all ESP32 variants)
   if (this->sleep_duration_.has_value())
     esp_sleep_enable_timer_wakeup(*this->sleep_duration_);
+
+#if !defined(USE_ESP32_VARIANT_ESP32C3)
+  // EXT0 wakeup using single GPIO
   if (this->wakeup_pin_ != nullptr) {
     bool level = !this->wakeup_pin_->is_inverted();
     if (this->wakeup_pin_mode_ == WAKEUP_PIN_MODE_INVERT_WAKEUP && this->wakeup_pin_->digital_read()) {
       level = !level;
     }
-    esp_sleep_enable_ext0_wakeup(gpio_num_t(this->wakeup_pin_->get_pin()), level);
+    esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(this->wakeup_pin_->get_pin()), level);
   }
+
+  // EXT1 wakeup using mask of RTC-capable GPIOs
   if (this->ext1_wakeup_.has_value()) {
     esp_sleep_enable_ext1_wakeup(this->ext1_wakeup_->mask, this->ext1_wakeup_->wakeup_mode);
   }
 
+  // Touch wakeup
   if (this->touch_wakeup_.has_value() && *(this->touch_wakeup_)) {
     esp_sleep_enable_touchpad_wakeup();
+    // Keep RTC peripherals powered for touch wake
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
   }
-#endif
-#ifdef USE_ESP32_VARIANT_ESP32C3
-  if (this->sleep_duration_.has_value())
-    esp_sleep_enable_timer_wakeup(*this->sleep_duration_);
+#else  // ESP32-C3 path
   if (this->wakeup_pin_ != nullptr) {
     bool level = !this->wakeup_pin_->is_inverted();
     if (this->wakeup_pin_mode_ == WAKEUP_PIN_MODE_INVERT_WAKEUP && this->wakeup_pin_->digital_read()) {
@@ -150,16 +165,38 @@ void DeepSleepComponent::begin_sleep(bool manual) {
     esp_deep_sleep_enable_gpio_wakeup(1 << this->wakeup_pin_->get_pin(),
                                       static_cast<esp_deepsleep_gpio_wake_up_mode_t>(level));
   }
-#endif
+#endif  // variant
   esp_deep_sleep_start();
-#endif
+#endif  // USE_ESP32
 
 #ifdef USE_ESP8266
-  ESP.deepSleep(*this->sleep_duration_);  // NOLINT(readability-static-accessed-through-instance)
+  // On ESP8266, deepSleep argument is microseconds
+  if (this->sleep_duration_.has_value()) {
+    ESP.deepSleep(*this->sleep_duration_);  // NOLINT(readability-static-accessed-through-instance)
+  } else {
+    // No duration set; default to indefinite sleep (wake only by RST)
+    ESP.deepSleep(0);  // NOLINT(readability-static-accessed-through-instance)
+  }
+#endif
+
+#ifdef USE_BEKEN
+  // Placeholder for Beken deep sleep implementation.
+  // Map sleep_duration_ (us) to Beken API, and configure GPIO/timer wakeups as supported.
+  // Example (pseudo):
+  // if (this->sleep_duration_.has_value()) {
+  //   beken_enable_timer_wakeup(*this->sleep_duration_);
+  // }
+  // if (this->wakeup_pin_ != nullptr) {
+  //   beken_enable_gpio_wakeup(this->wakeup_pin_->get_pin(), /*level*/ !this->wakeup_pin_->is_inverted());
+  // }
+  // beken_deep_sleep_start();
 #endif
 }
+
 float DeepSleepComponent::get_setup_priority() const { return setup_priority::LATE; }
+
 void DeepSleepComponent::prevent_deep_sleep() { this->prevent_ = true; }
+
 void DeepSleepComponent::allow_deep_sleep() { this->prevent_ = false; }
 
 }  // namespace deep_sleep
