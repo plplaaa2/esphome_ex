@@ -7,10 +7,6 @@
 #include <Esp.h>
 #endif
 
-#ifdef USE_LIBRETINY
-#include <lt_sleep.h>
-#endif
-
 namespace esphome {
 namespace deep_sleep {
 
