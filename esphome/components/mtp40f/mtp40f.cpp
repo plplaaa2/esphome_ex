@@ -36,7 +36,7 @@ void MTP40FComponent::update() {
   uint32_t warmup_ms = this->warmup_seconds_ * 1000;
 
   if (now_ms - this->last_update_time_ < warmup_ms) {
-    ESP_LOGW(TAG, "MTP40F warming up, %u seconds left", (warmup_ms - (now_ms - this->last_update_time_)) / 1000);
+    ESP_LOGW(TAG, "MTP40F warming up, %lu seconds left", (warmup_ms - (now_ms - this->last_update_time_)) / 1000);
     this->status_set_warning();
     return;
   }
@@ -61,7 +61,7 @@ void MTP40FComponent::update() {
   uint8_t status_byte = this->response_buffer_[11];
 
   if (status_byte == 0x00) {
-    ESP_LOGD(TAG, "MTP40F Received CO2=%u ppm", ppm_value);
+    ESP_LOGD(TAG, "MTP40F Received CO2=%lu ppm", ppm_value);
     if (this->co2_sensor_ != nullptr) {
       this->co2_sensor_->publish_state(ppm_value);
     }
@@ -242,7 +242,7 @@ void MTP40FComponent::dump_config() {
   LOG_SENSOR("  ", "CO2", this->co2_sensor_);
   LOG_SENSOR("  ", "Air Pressure Reference", this->air_pressure_reference_sensor_);
   ESP_LOGCONFIG(TAG, "  Self-calibration enabled: %s", YESNO(this->self_calibration_));
-  ESP_LOGCONFIG(TAG, "  Warmup time: %u seconds", this->warmup_seconds_);
+  ESP_LOGCONFIG(TAG, "  Warmup time: %lu seconds", this->warmup_seconds_);
 }
 
 }  // namespace mtp40f
